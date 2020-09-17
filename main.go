@@ -4,8 +4,6 @@ import (
 	"TestGo/api"
 	"TestGo/client"
 	"TestGo/db"
-	// フレームワーク Gin
-	// GORM Go言語のORマッパー
 )
 
 func main() {
@@ -14,9 +12,11 @@ func main() {
 	// 単純なGET
 	client.TestAPIClientGet()
 	// パラメーター付きGET
-	//testAPIClientGetParam()
-	// POST
-	//testAPIClientPost()
+	client.TestAPIClientGetParam("1", "testname") // URLのパスパラメーター（仮）適当に設定
+	// POST（パラメータがjson形式）
+	client.TestAPIClientPost1()
+	// POST（パラメータをURLエンコード）
+	client.TestAPIClientPost2("https://httpbin.org/post", "99") // URL,id設定
 
 	// DB接続（MySQL）
 	db.InitDb()
