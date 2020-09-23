@@ -2,8 +2,10 @@ package db
 
 import (
 	"fmt"
+	"math/rand"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/mysql"
@@ -70,40 +72,46 @@ func Test_maxConn(t *testing.T) {
 	}
 }
 
+// コネクションプールを使用しDBへの接続数の確認
 func TestDb_useIdleConn(t *testing.T) {
 	// DB接続をする
 	InitDb()
 	// DB接続を取得
 	connPoolDB := ConnectionDb()
 	// SetMaxIdleConnsはアイドル状態のコネクションプール内の最大数を設定します
-	connPoolDB.DB().SetMaxIdleConns(0)
+	// connPoolDB.DB().SetMaxIdleConns(0)
+	connPoolDB.DB().SetMaxIdleConns(5)
 	// SetMaxOpenConnsは接続済みのデータベースコネクションの最大数を設定
 	connPoolDB.DB().SetMaxOpenConns(100)
 
 	sem := make(chan struct{}, 5)
 	qs := getQueries(10)
-	for _, item := range qs {
+	for _, item := range qs { // _, item := range qs は　インデックス, 値 := range qs　※ブランク識別子 _ を使ってインデックスを無視
 		sem <- struct{}{}
 		go func(db *gorm.DB, item string) {
 			defer func() {
 				<-sem
 			}()
-			// if err := fetch(db, item); err != nil {
-			// 	panic(err)
-			// }
+			if err := fetch(db, item); err != nil {
+				panic(err)
+			}
 		}(connPoolDB, item)
 	}
 }
 
 func getQueries(num int) []string {
-	qs := make([]string, 0, num)
+	qs := make([]string, 0, num) // 組み込み関数make
 	for index := 0; index < num; index++ {
-		// qs = append(qs, fmt.Sprintf("select sleep(%v)", random(0.001, 0.03)))
-		qs = append(qs, fmt.Sprintf("select sleep(5)"))
+		qs = append(qs, fmt.Sprintf("select sleep(%v)", random(0.001, 0.03)))
 	}
 	return qs
 }
+func random(min, max float64) float64 {
+	rand.Seed(time.Now().UnixNano())
+	return rand.Float64()*(max-min) + min
+}
 
+// コネクションプールを使用したときのパフォーマンス比較
 func BenchmarkUseIdleConn(b *testing.B) {
 	// DB接続をする
 	InitDb()
@@ -124,9 +132,9 @@ func BenchmarkUseIdleConn(b *testing.B) {
 				defer func() {
 					<-sem
 				}()
-				// if err := fetch(db, "select sleep(0.01)"); err != nil {
-				// 	panic(err)
-				// }
+				if err := fetch(db, "select sleep(0.01)"); err != nil {
+					panic(err)
+				}
 			}(connPoolDB)
 		}
 
@@ -134,6 +142,11 @@ func BenchmarkUseIdleConn(b *testing.B) {
 	connPoolDB.Close()
 }
 
+func fetch(db *gorm.DB, q string) error {
+	return db.Exec(q).Error
+}
+
+// コネクションプールを使用したときのパフォーマンス比較
 // 都度gorm.DBを作ってしまっている場合
 func BenchmarkUseIdleConnForEveryTime(b *testing.B) {
 	// DB接続をする
@@ -152,11 +165,11 @@ func BenchmarkUseIdleConnForEveryTime(b *testing.B) {
 				connPoolDB := ConnectionDb()
 				connPoolDB.DB().SetMaxOpenConns(100)
 				connPoolDB.DB().SetMaxIdleConns(0)
-				// connPoolDB.DB().SetConnMaxLifetime(time.Hour)
-				defer connPoolDB.Close()
-				// if err := fetch(connPoolDB, "select sleep(0.01)"); err != nil {
-				// 	panic(err)
-				// }
+				connPoolDB.DB().SetConnMaxLifetime(time.Hour)
+				//defer connPoolDB.Close()
+				if err := fetch(connPoolDB, "select sleep(0.01)"); err != nil {
+					panic(err)
+				}
 			}()
 		}
 	})
